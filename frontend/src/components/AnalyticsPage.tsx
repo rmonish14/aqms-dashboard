@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ZAxis
+  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ZAxis,
+  BarChart, Bar, Cell
 } from 'recharts';
 import { AlertOctagon, Activity, FileDown, DatabaseBackup, Clock, ShieldAlert } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -48,6 +49,15 @@ export default function AnalyticsPage() {
     raw: e
   })).reverse();
 
+  // Aggregate data for Bar Graph (Working Condition / Anomalies per Node)
+  const barData = Object.values(
+    events.reduce((acc, e) => {
+       if (!acc[e.node_id]) acc[e.node_id] = { node: e.node_id, Count: 0 };
+       acc[e.node_id].Count += 1;
+       return acc;
+    }, {})
+  ).sort((a: any, b: any) => b.Count - a.Count);
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-7xl mx-auto px-8 py-6 space-y-6">
@@ -80,6 +90,36 @@ export default function AnalyticsPage() {
             <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-2 flex flex-row items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Offline Blackouts</p>
             <p className="text-2xl font-mono font-semibold text-yellow-500">{events.filter(e => e.event_category === 'NODE_OFFLINE_DROP').length}</p>
           </div>
+        </div>
+
+        {/* Working Condition Bar Graph */}
+        <div className="glass-card rounded-xl p-6">
+           <div className="mb-5">
+             <h3 className="text-sm font-semibold text-foreground">Node Condition Reliability</h3>
+             <p className="text-[10px] text-muted-foreground mt-0.5">Absolute count of critical anomalies triggered per node (Higher = Worse Condition)</p>
+           </div>
+           
+           <div className="h-48 mt-4">
+             {barData.length === 0 && !isLoading ? (
+                <div className="w-full h-full flex items-center justify-center text-xs font-mono text-muted-foreground border border-dashed border-border rounded-xl">
+                  ALL NODES OPERATING NOMINALLY
+                </div>
+             ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                    <XAxis dataKey="node" {...axisProps} tickFormatter={tick => String(tick).split('-').pop() || String(tick)} />
+                    <YAxis dataKey="Count" {...axisProps} allowDecimals={false} />
+                    <Tooltip cursor={{ fill: 'var(--color-secondary)', opacity: 0.4 }} {...tooltipStyle as any} />
+                    <Bar dataKey="Count" radius={[4, 4, 0, 0]}>
+                      {barData.map((entry: any, index: number) => (
+                         <Cell key={`cell-${index}`} fill={entry.Count > 5 ? 'var(--color-destructive)' : entry.Count > 2 ? '#f97316' : 'var(--color-primary)'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+             )}
+           </div>
         </div>
 
         {/* Scatter Event Map */}

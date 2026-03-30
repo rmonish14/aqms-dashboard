@@ -27,16 +27,34 @@ export default function Dashboard({
   useEffect(() => {
     const socket = io('http://localhost:5000', { reconnectionAttempts: 3, timeout: 2000 });
 
-    socket.on('sensor_data', (data) => {
+    socket.on('node_data', (data) => {
       setIsMockMode(false);
+      
+      const formattedData = {
+        nodeId:      data.nodeId,
+        aqi:         Math.round((data.pm25 ?? 0) * 2.5),
+        pm2_5:       data.pm25        ?? 0,
+        pm10:        data.pm10        ?? 0,
+        co:          data.co          ?? 0,
+        co2:         data.co2         ?? 0,
+        temperature: data.temperature ?? 0,
+        humidity:    data.humidity    ?? 0,
+        timestamp:   data.timestamp,
+      };
+
       setNodesData(prev => {
-        const next = { ...prev, [data.nodeId]: data };
+        const next = { ...prev, [formattedData.nodeId]: formattedData };
         onNodesChange?.(next);
         return next;
       });
+      setNodesStatus(prev => {
+        const next = { ...prev, [formattedData.nodeId]: { status: 'online' } };
+        onStatusChange?.(next);
+        return next;
+      });
       setNodesHistory(prev => {
-        const hist = prev[data.nodeId] || [];
-        return { ...prev, [data.nodeId]: [...hist.slice(-19), data] };
+        const hist = prev[formattedData.nodeId] || [];
+        return { ...prev, [formattedData.nodeId]: [...hist.slice(-19), formattedData] };
       });
     });
 

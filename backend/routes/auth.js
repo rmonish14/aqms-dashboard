@@ -1,54 +1,90 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const express  = require('express');
+const bcrypt    = require('bcryptjs');
+const jwt       = require('jsonwebtoken');
+const { pool }  = require('../config/db');
 
-const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_123';
+const router     = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'aqms_jwt_secret_change_in_production';
+const SALT_ROUNDS = 12;
 
-// Register
+// ── Helper: hash a plain-text password ───────────────────────────────────────
+const hashPassword = (plain) => bcrypt.hash(plain, SALT_ROUNDS);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/auth/register
+// Creates a new user with a bcrypt-hashed password
+// Body: { username, password, role? }
+// ─────────────────────────────────────────────────────────────────────────────
 router.post('/register', async (req, res) => {
-  const { email, password, role } = req.body;
-  
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password required' });
+  const { username, password, role = 'operator' } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'username and password are required' });
   }
 
   try {
-    const existing = await User.findOne({ email });
-    if (existing) return res.status(400).json({ error: 'User already exists' });
+    // Check for duplicate username
+    const existing = await pool.query(
+      'SELECT id FROM users WHERE username = $1',
+      [username]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'Username already exists' });
+    }
 
-    const passwordHash = await bcrypt.hash(password, 10);
-    const user = new User({ email, passwordHash, role });
-    await user.save();
-    
+    // Hash password before storage — never store plain text
+    const hashed = await hashPassword(password);
+
+    await pool.query(
+      'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
+      [username, hashed, role]
+    );
+
     res.status(201).json({ message: 'User registered successfully' });
   } catch (err) {
-    console.error('[Auth] Register Error:', err);
+    console.error('[Auth] Register error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Login
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/auth/login  (also aliased via POST /api/login in server.js)
+// Body: { username, password }
+// Returns: { token, role }
+// ─────────────────────────────────────────────────────────────────────────────
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'username and password are required' });
+  }
 
   try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    const result = await pool.query(
+      'SELECT * FROM users WHERE username = $1',
+      [username]
+    );
 
-    const validPassword = await bcrypt.compare(password, user.passwordHash);
-    if (!validPassword) return res.status(401).json({ error: 'Invalid credentials' });
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const user = result.rows[0];
+    const valid = await bcrypt.compare(password, user.password);
+
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
 
     const token = jwt.sign(
-      { userId: user._id, email: user.email, role: user.role },
+      { userId: user.id, username: user.username, role: user.role },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    res.json({ token, role: user.role });
+    res.json({ token, role: user.role, username: user.username });
   } catch (err) {
-    console.error('[Auth] Login Error:', err);
+    console.error('[Auth] Login error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

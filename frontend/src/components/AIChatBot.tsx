@@ -9,7 +9,6 @@ interface Message {
   content: string;
   timestamp: Date;
 }
-
 export interface DashboardContext {
   nodes: Record<string, any>;
   status: Record<string, any>;
@@ -28,8 +27,9 @@ interface Props {
   onAction?: (action: AIAction) => void;
 }
 
-// ── Gemini Config ─────────────────────────────────────────────────────────────
-const DEFAULT_GEMINI_API_KEY = 'AIzaSyDYPpzPhJkDmRtqQq4rsqAUPNjGK_7Cp7M';
+// ── OpenRouter / NVIDIA Nemotron Config ────────────────────────────────────────────────
+const DEFAULT_API_KEY = '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';
+const DEFAULT_MODEL   = 'nvidia/llama-3.1-nemotron-70b-instruct';
 
 // ── Build system prompt from live dashboard data ──────────────────────────────
 function buildSystemPrompt(ctx: DashboardContext): string {
@@ -104,75 +104,6 @@ function stripAction(text: string): string {
   return text.replace(/```action[\s\S]*?```/g, '').trim();
 }
 
-// ── Offline / Fallback Intent Engine ─────────────────────────────────────────
-function processOfflineIntent(input: string, ctx: DashboardContext): { text: string; action?: AIAction } {
-  const lower = input.toLowerCase();
-  
-  // 1. Threshold changes
-  const setMatch = lower.match(/(?:set|change|update).*?([a-z0-9_.]+)\s*(?:threshold|limit|to)?\s*(?:to|=)?\s*(\d+)/i);
-  if (setMatch || lower.includes('set')) {
-     const metricRaw = (setMatch?.[1] || lower).replace(/[^a-z0-9]/g, '');
-     let metric: 'aqi' | 'pm25' | 'co' | 'co2' | null = null;
-     if (metricRaw.includes('aqi')) metric = 'aqi';
-     if (metricRaw.includes('pm2') || metricRaw.includes('pm')) metric = 'pm25';
-     if (metricRaw.includes('co2')) metric = 'co2';
-     else if (metricRaw.includes('co')) metric = 'co';
-     
-     const valMatch = lower.match(/\b(\d+)\b/);
-     const value = valMatch ? parseInt(valMatch[1], 10) : null;
-     
-     if (metric && value !== null) {
-        return {
-          text: `*(Offline AI Mode)* \n\nI've updated the **${metric.toUpperCase()}** system threshold to **${value}** as requested.\n\n\`\`\`action\n{"type":"SET_THRESHOLD","metric":"${metric}","value":${value}}\n\`\`\``,
-          action: { type: 'SET_THRESHOLD', metric, value }
-        };
-     }
-  }
-
-  // 2. Highest AQI / nodes query
-  if (lower.includes('highest') || lower.includes('worst') || lower.includes('bad') || lower.includes('dangerous')) {
-     let highestNode = '';
-     let maxAqi = -1;
-     const isWorkerQuery = lower.includes('worker') || lower.includes('person');
-     
-     for (const [id, data] of Object.entries(ctx.nodes)) {
-        if (isWorkerQuery && !id.startsWith('worker_')) continue;
-        if (!isWorkerQuery && id.startsWith('worker_')) continue; // Default to tower if not explicitly asking for worker
-        
-        if (data.aqi > maxAqi) { maxAqi = data.aqi; highestNode = id; }
-     }
-     if (highestNode) {
-       const label = isWorkerQuery ? 'worker' : 'tower';
-       const name = isWorkerQuery ? highestNode.split('_').slice(2).join(' ') : highestNode;
-       return { text: `*(Offline AI Mode)* \n\nThe ${label} with the highest recorded AQI exposure is currently **${name}** with an AQI of **${maxAqi}**.` };
-     }
-  }
-  
-  if (lower.includes('how many') || lower.includes('status')) {
-     const workers = Object.keys(ctx.nodes).filter(k => k.startsWith('worker_')).length;
-     const towers = Object.keys(ctx.nodes).filter(k => !k.startsWith('worker_')).length;
-     const online = Object.values(ctx.status).filter(s => s.status === 'online').length;
-     return { text: `*(Offline AI Mode)* \n\nThere are currently **${towers} towers** and **${workers} wearable trackers** communicating with the system. A total of **${online}** devices are actively online generating telemetry.` };
-  }
-
-  // 3. Alerts
-  if (lower.includes('alert') || lower.includes('warning')) {
-     const critical = ctx.alerts.filter(a => a.severity === 'critical').length;
-     return { text: `*(Offline AI Mode)* \n\nThe system currently has **${ctx.alerts.length}** total alerts logged, with **${critical}** marked as critical priority.` };
-  }
-
-  // 4. Analysis
-  if (lower.includes('analyze') || lower.includes('safe') || lower.includes('air quality')) {
-    const keys = Object.keys(ctx.nodes);
-    const avgAqi = keys.length ? Object.values(ctx.nodes).reduce((s, n) => s + n.aqi, 0) / keys.length : 0;
-    const isSafe = avgAqi <= ctx.thresholds.aqi;
-    return { text: `*(Offline AI Mode)* \n\nThe fleet's average AQI is **${Math.round(avgAqi)}**. Based on your current warning threshold of ${ctx.thresholds.aqi}, the air quality is considered **${isSafe ? 'Safe / Moderate ✅' : 'Unhealthy 🚨'}**.` };
-  }
-
-  // Fallback
-  return { text: `*(Offline AI Mode - API Demo Quota Exceeded)* \n\nI am currently operating as an offline rule-bot because the public AI key limits were reached. \n\nI am still wired into the dashboard! Try asking me to:\n- *"Set AQI threshold to 120"*\n- *"Which node has the highest AQI?"*\n- *"Analyze current air quality"*` };
-}
-
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function AIChatBot({ context, onAction }: Props) {
   const [open,     setOpen]     = useState(false);
@@ -190,22 +121,22 @@ export default function AIChatBot({ context, onAction }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const [apiKey, setApiKey] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('aqms_gemini_key') || DEFAULT_GEMINI_API_KEY;
+      return localStorage.getItem('aqms_ai_key') || DEFAULT_API_KEY;
     }
-    return DEFAULT_GEMINI_API_KEY;
+    return DEFAULT_API_KEY;
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef       = useRef<HTMLInputElement>(null);
-  const historyRef     = useRef<{ role: string; parts: { text: string }[] }[]>([]);
+  const historyRef     = useRef<{ role: string; content: string }[]>([]);
 
   const handleSaveKey = (key: string) => {
-    setApiKey(key);
-    if (key === DEFAULT_GEMINI_API_KEY || !key) {
-      localStorage.removeItem('aqms_gemini_key');
-      setApiKey(DEFAULT_GEMINI_API_KEY);
+    const val = key || DEFAULT_API_KEY;
+    setApiKey(val);
+    if (!key) {
+      localStorage.removeItem('aqms_ai_key');
     } else {
-      localStorage.setItem('aqms_gemini_key', key);
+      localStorage.setItem('aqms_ai_key', key);
     }
   };
 
@@ -226,55 +157,40 @@ export default function AIChatBot({ context, onAction }: Props) {
     setMessages(prev => [...prev, userMsg]);
     setLoading(true);
 
-    // Build conversation history for Gemini
-    historyRef.current.push({ role: 'user', parts: [{ text }] });
+    // Build conversation history for OpenRouter (OpenAI-compatible)
+    historyRef.current.push({ role: 'user', content: text });
 
     try {
       const systemPrompt = buildSystemPrompt(context);
 
       const body = {
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: historyRef.current,
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1024,
-        },
+        model: DEFAULT_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...historyRef.current,
+        ],
+        temperature: 0.7,
+        max_tokens: 1024,
       };
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-      const res  = await fetch(url, {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': window.location.origin,
+          'X-Title': 'AQMS Dashboard',
+        },
         body: JSON.stringify(body),
       });
 
       if (!res.ok) {
         const err = await res.json();
-        // If Quota exceeded, trigger the smart local offline intent engine!
-        if (res.status === 429 || err?.error?.code === 429 || err?.error?.message?.includes('Quota') || err?.error?.message?.includes('quota')) {
-           const offline = processOfflineIntent(text, context);
-           
-           if (offline.action && onAction) {
-             onAction(offline.action);
-           }
-           
-           const displayText = stripAction(offline.text);
-           historyRef.current.push({ role: 'model', parts: [{ text: offline.text }] });
-           setMessages(prev => [...prev, {
-             id: (Date.now() + 1).toString(),
-             role: 'assistant',
-             content: displayText,
-             timestamp: new Date(),
-           }]);
-           setLoading(false);
-           return;
-        }
         throw new Error(err?.error?.message ?? `API error ${res.status}`);
       }
 
       const data = await res.json();
-      const rawText: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'No response received.';
+      const rawText: string = data.choices?.[0]?.message?.content ?? 'No response received.';
 
       // Parse and execute any embedded action
       const action = parseAction(rawText);
@@ -284,7 +200,7 @@ export default function AIChatBot({ context, onAction }: Props) {
 
       const displayText = stripAction(rawText);
 
-      historyRef.current.push({ role: 'model', parts: [{ text: rawText }] });
+      historyRef.current.push({ role: 'assistant', content: rawText });
 
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -355,7 +271,7 @@ export default function AIChatBot({ context, onAction }: Props) {
                 <p className="text-sm font-semibold text-foreground leading-none">AQMS AI</p>
                 <p className="text-[10px] text-primary mt-0.5 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-                  Online · Gemini 2.0 Flash
+                  Online · NVIDIA Nemotron 70B
                 </p>
               </div>
             </div>
@@ -378,15 +294,15 @@ export default function AIChatBot({ context, onAction }: Props) {
           {/* Settings Panel */}
           {showSettings && (
             <div className="px-4 py-3 bg-secondary/30 border-b border-border text-xs shrink-0">
-              <label className="block text-muted-foreground mb-1.5 font-medium">Custom Gemini API Key</label>
+              <label className="block text-muted-foreground mb-1.5 font-medium">Gemini API Key</label>
               <input 
-                type="password" 
-                value={apiKey === DEFAULT_GEMINI_API_KEY ? '' : apiKey}
+                type="text"
+                value={apiKey}
                 onChange={e => handleSaveKey(e.target.value)}
-                placeholder="AIzaSy..."
-                className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none focus:border-primary"
+                placeholder="AIzaSy... (paste your Google AI Studio key)"
+                className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none focus:border-primary font-mono text-[10px]"
               />
-              <p className="text-[10px] text-muted-foreground mt-1.5">Your key is stored locally in your browser and used to bypass public quota limits.</p>
+              <p className="text-[10px] text-muted-foreground mt-1.5">Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-primary underline">aistudio.google.com</a> · Stored in your browser locally.</p>
             </div>
           )}
 
@@ -474,7 +390,7 @@ export default function AIChatBot({ context, onAction }: Props) {
               </button>
             </div>
             <p className="text-[9px] text-muted-foreground mt-1.5 text-center">
-              Powered by Gemini 2.0 Flash · Context: {Object.keys(context.nodes).length} nodes, {context.alerts.length} alerts
+              Powered by NVIDIA Nemotron 70B via OpenRouter · Context: {Object.keys(context.nodes).length} nodes, {context.alerts.length} alerts
             </p>
           </div>
         </div>

@@ -1,66 +1,101 @@
 const express = require('express');
-const Node = require('../models/Node');
-const { Pool } = require('pg');
-
-const PG_URI = 'postgresql://aqms_user:EwazH8Iks5Hb2EjRDC4rlFeOWkNUBpXQ@dpg-d74l6ne3jp1c7395i7o0-a.singapore-postgres.render.com/aqms';
-const pgPool = new Pool({ connectionString: PG_URI, ssl: { rejectUnauthorized: false } });
-
+const { pool } = require('../config/db');
 
 const router = express.Router();
 
-// Get all nodes
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/nodes
+// Returns all registered devices from the devices table
+// ─────────────────────────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   try {
-    const nodes = await Node.find({});
-    res.json(nodes);
+    const { rows } = await pool.query(
+      'SELECT * FROM devices ORDER BY created_at DESC'
+    );
+    res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch nodes' });
+    console.error('[API] Failed to fetch devices:', err.message);
+    res.status(500).json({ error: 'Failed to fetch devices' });
   }
 });
 
-// Get node by ID
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/nodes/:id
+// Returns a single device by device_id
+// ─────────────────────────────────────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
   try {
-    const node = await Node.findOne({ nodeId: req.params.id });
-    if (!node) return res.status(404).json({ error: 'Node not found' });
-    res.json(node);
+    const { rows } = await pool.query(
+      'SELECT * FROM devices WHERE device_id = $1',
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Device not found' });
+    res.json(rows[0]);
   } catch (err) {
-    res.status(500).json({ error: 'Error fetching node' });
+    console.error('[API] Failed to fetch device:', err.message);
+    res.status(500).json({ error: 'Error fetching device' });
   }
 });
 
-// Get critical anomalous events for a node (From PostgreSQL)
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/nodes/:id/events
+// Returns the last 100 critical events for a specific device
+// ─────────────────────────────────────────────────────────────────────────────
 router.get('/:id/events', async (req, res) => {
-  const { id } = req.params;
   try {
-    const query = `
-      SELECT * FROM critical_sensor_events 
-      WHERE node_id = $1 
-      ORDER BY timestamp DESC 
-      LIMIT 100
-    `;
-    const { rows } = await pgPool.query(query, [id]);
+    const { rows } = await pool.query(
+      `SELECT * FROM critical_events
+       WHERE device_id = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [req.params.id]
+    );
     res.json(rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error fetching anomaly data' });
+    console.error('[API] Failed to fetch device events:', err.message);
+    res.status(500).json({ error: 'Error fetching device events' });
   }
 });
 
-// Get ALL fleet anomalies (for the Analytics Dashboard)
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/nodes/fleet/anomalies
+// Returns all critical anomalies in the last 24 hours across the fleet
+// ─────────────────────────────────────────────────────────────────────────────
 router.get('/fleet/anomalies', async (req, res) => {
   try {
-    // Return last 24h of critical anomalies across the entire fleet
-    const query = `
-      SELECT * FROM critical_sensor_events 
-      WHERE timestamp >= NOW() - INTERVAL '24 hours'
-      ORDER BY timestamp DESC
-    `;
-    const { rows } = await pgPool.query(query);
+    const { rows } = await pool.query(
+      `SELECT * FROM critical_events
+       WHERE created_at >= NOW() - INTERVAL '24 hours'
+       ORDER BY created_at DESC`
+    );
     res.json(rows);
   } catch (err) {
-    console.error(err);
+    console.error('[API] Failed to fetch fleet anomalies:', err.message);
     res.status(500).json({ error: 'Error fetching fleet anomalies' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/nodes
+// Manually register a device with an optional location
+// Body: { device_id, location? }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/', async (req, res) => {
+  const { device_id, location } = req.body;
+  if (!device_id) return res.status(400).json({ error: 'device_id is required' });
+
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO devices (device_id, location)
+       VALUES ($1, $2)
+       ON CONFLICT (device_id) DO UPDATE SET location = EXCLUDED.location
+       RETURNING *`,
+      [device_id, location || null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('[API] Failed to register device:', err.message);
+    res.status(500).json({ error: 'Failed to register device' });
   }
 });
 
