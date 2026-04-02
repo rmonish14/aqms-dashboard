@@ -1,6 +1,21 @@
 import { useState } from 'react';
-import { Sliders, ShieldCheck, Server, Save, CheckCircle2, Bell, Mail, MessageSquare, Smartphone } from 'lucide-react';
+import { Sliders, ShieldCheck, Server, Save, CheckCircle2, Bell, Mail, MessageSquare, Smartphone, Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const pageVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.08 } },
+};
+const itemVariants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' as const } },
+};
+const tabVariants = {
+  hidden: { opacity: 0, y: 8 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' as const } },
+  exit: { opacity: 0, y: -6, transition: { duration: 0.15 } },
+};
 
 const TABS = [
   { id: 'thresholds',    label: 'Alert Thresholds', icon: Sliders       },
@@ -18,7 +33,12 @@ export default function SettingsPage({
   alertEmail?: string;
   onConfigChange?: (updates: { thresholds?: any, alertEmail?: string }) => void;
 } = {}) {
-  const [activeTab,  setActiveTab]  = useState('thresholds');
+  const [activeTab,  setActiveTab]  = useState('network');
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [pinEntry, setPinEntry] = useState('');
+  const [pinError, setPinError] = useState(false);
+  const REQUIRED_PIN = '1234';
+  const LOCKED_TABS = ['thresholds', 'notifications', 'security'];
   const [aqiLimit,   setAqiLimit]   = useState(ext?.aqi  ?? 150);
   const [coLimit,    setCoLimit]    = useState(ext?.co   ?? 9);
   const [co2Limit,   setCo2Limit]   = useState(ext?.co2  ?? 1000);
@@ -55,10 +75,10 @@ export default function SettingsPage({
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-5xl mx-auto px-8 py-6 space-y-6">
+      <motion.div initial="hidden" animate="visible" variants={pageVariants} className="max-w-5xl mx-auto px-8 py-6 space-y-6">
 
         {/* Page header */}
-        <div className="flex items-center justify-between pb-2 border-b border-border">
+        <motion.div variants={itemVariants} className="flex items-center justify-between pb-2 border-b border-border">
           <div className="flex items-center gap-3">
             <Sliders className="w-5 h-5 text-muted-foreground" />
             <div>
@@ -78,7 +98,7 @@ export default function SettingsPage({
             {saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
             {saved ? 'Saved' : 'Save Changes'}
           </button>
-        </div>
+        </motion.div>
 
         <div className="flex gap-6">
           {/* Tab nav */}
@@ -96,15 +116,73 @@ export default function SettingsPage({
               >
                 <t.icon className="w-3.5 h-3.5 shrink-0" />
                 {t.label}
+                {LOCKED_TABS.includes(t.id) && !isUnlocked && <Lock className="w-3.5 h-3.5 ml-auto opacity-50 text-muted-foreground group-hover:text-foreground group-focus:text-foreground" />}
               </button>
             ))}
           </aside>
 
           {/* Panel */}
-          <div className="flex-1 glass-card rounded-xl p-6 min-h-[520px]">
+          <motion.div variants={itemVariants} className="flex-1 glass-card rounded-xl p-6 min-h-[520px]">
+            <AnimatePresence mode="wait">
 
+            {LOCKED_TABS.includes(activeTab) && !isUnlocked ? (
+              <motion.div key="lock-screen" variants={tabVariants} initial="hidden" animate="visible" exit="exit" className="flex flex-col items-center justify-center h-[420px]">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-5 border border-primary/20 shadow-inner">
+                  <ShieldCheck className="w-7 h-7 text-primary" />
+                </div>
+                <h2 className="text-xl font-bold text-foreground tracking-tight">Restricted Access</h2>
+                <p className="text-sm text-muted-foreground mt-2 mb-8 text-center max-w-sm">
+                  Enter the 4-digit master PIN to view and modify system thresholds, notifications, and API security tokens.
+                </p>
+                <div className="space-y-4 flex flex-col items-center">
+                  <input
+                    autoFocus
+                    type="password"
+                    maxLength={4}
+                    value={pinEntry}
+                    onChange={(e) => {
+                      setPinEntry(e.target.value.replace(/\D/g, ''));
+                      setPinError(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (pinEntry === REQUIRED_PIN) {
+                          setIsUnlocked(true);
+                          setPinEntry('');
+                        } else {
+                          setPinError(true);
+                          setPinEntry('');
+                        }
+                      }
+                    }}
+                    className={cn(
+                      "w-36 bg-secondary border rounded-xl px-4 py-4 text-center text-3xl font-mono tracking-[0.5em] text-foreground focus:outline-none focus:ring-2 focus:border-transparent transition-all placeholder:text-muted-foreground/30",
+                      pinError ? "border-destructive focus:ring-destructive/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]" : "border-border focus:ring-primary/50"
+                    )}
+                    placeholder="••••"
+                  />
+                  {pinError && <p className="text-xs font-semibold text-destructive animate-pulse">Incorrect PIN. Please try again.</p>}
+                  <button 
+                    onClick={() => {
+                      if (pinEntry === REQUIRED_PIN) {
+                        setIsUnlocked(true);
+                        setPinEntry('');
+                      } else {
+                        setPinError(true);
+                        setPinEntry('');
+                      }
+                    }}
+                    className="w-full relative overflow-hidden flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm rounded-xl transition-all group active:scale-[0.98]"
+                  >
+                    Unlock Panel
+                  </button>
+                </div>
+              </motion.div>
+            ) : (
+              <>
             {/* ── THRESHOLDS ── */}
             {activeTab === 'thresholds' && (
+              <motion.div key="thresholds" variants={tabVariants} initial="hidden" animate="visible" exit="exit">
               <div className="space-y-6">
                 <div>
                   <h2 className="text-sm font-semibold text-foreground mb-1">Alert Thresholds</h2>
@@ -123,10 +201,12 @@ export default function SettingsPage({
                   <Toggle value={muteAlerts} onChange={setMuteAlerts} />
                 </div>
               </div>
+              </motion.div>
             )}
 
             {/* ── NOTIFICATIONS ── */}
             {activeTab === 'notifications' && (
+              <motion.div key="notifications" variants={tabVariants} initial="hidden" animate="visible" exit="exit">
               <div className="space-y-6">
                 <div>
                   <h2 className="text-sm font-semibold text-foreground mb-1">Notification Channels</h2>
@@ -220,10 +300,12 @@ export default function SettingsPage({
                   )}
                 </div>
               </div>
+              </motion.div>
             )}
 
             {/* ── SECURITY ── */}
             {activeTab === 'security' && (
+              <motion.div key="security" variants={tabVariants} initial="hidden" animate="visible" exit="exit">
               <div className="space-y-6">
                 <div>
                   <h2 className="text-sm font-semibold text-foreground mb-1">Admin Security</h2>
@@ -252,10 +334,12 @@ export default function SettingsPage({
                   </div>
                 </div>
               </div>
+              </motion.div>
             )}
 
             {/* ── MQTT / NETWORK ── */}
             {activeTab === 'network' && (
+              <motion.div key="network" variants={tabVariants} initial="hidden" animate="visible" exit="exit">
               <div className="space-y-6">
                 <div>
                   <h2 className="text-sm font-semibold text-foreground mb-1">MQTT Broker Configuration</h2>
@@ -310,11 +394,16 @@ export default function SettingsPage({
                   </div>
                 </div>
               </div>
+              </motion.div>
             )}
 
-          </div>
+              </>
+            )}
+
+            </AnimatePresence>
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -325,7 +414,7 @@ function ThresholdRow({ label, description, value, min, max, step, unit, color, 
   unit: string; color: string; onChange: (v: number) => void;
 }) {
   return (
-    <div className="space-y-2 pb-5 border-b border-border last:border-0">
+    <motion.div whileHover={{ x: 2 }} transition={{ duration: 0.15 }} className="space-y-2 pb-5 border-b border-border last:border-0">
       <div className="flex items-baseline justify-between">
         <div>
           <p className="text-xs font-semibold text-foreground">{label}</p>
@@ -338,7 +427,7 @@ function ThresholdRow({ label, description, value, min, max, step, unit, color, 
       <input type="range" min={min} max={max} step={step} value={value}
         onChange={e => onChange(parseInt(e.target.value))}
         className="w-full h-1.5 rounded-full bg-secondary appearance-none cursor-pointer accent-primary" />
-    </div>
+    </motion.div>
   );
 }
 

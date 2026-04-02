@@ -2,8 +2,18 @@ import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import NodeCard from './NodeCard';
 import type { SystemAlert } from './AlertFeed';
-import { Activity, Radio, AlertTriangle, MonitorPlay, TrendingUp, Wind, Thermometer } from 'lucide-react';
+import { Radio, AlertTriangle, MonitorPlay, TrendingUp, Wind, Thermometer } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { motion } from 'framer-motion';
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } }
+};
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+};
 
 export default function Dashboard({
   globalAlerts,
@@ -25,11 +35,20 @@ export default function Dashboard({
   const [isMockMode, setIsMockMode]     = useState(false);
 
   useEffect(() => {
-    const socket = io('http://localhost:5000', { reconnectionAttempts: 3, timeout: 2000 });
+    const socket = io('http://localhost:5000', {
+      reconnectionAttempts: Infinity,  // keep retrying — don't lock into mock mode permanently
+      timeout:            3000,
+    });
 
     socket.on('node_data', (data) => {
       setIsMockMode(false);
-      
+
+      // ── Stop the mock engine the moment real data arrives ──────────────────
+      if (mockInterval) {
+        clearInterval(mockInterval);
+        (mockInterval as any) = null;
+      }
+
       const formattedData = {
         nodeId:      data.nodeId,
         aqi:         Math.round((data.pm25 ?? 0) * 2.5),
@@ -39,6 +58,11 @@ export default function Dashboard({
         co2:         data.co2         ?? 0,
         temperature: data.temperature ?? 0,
         humidity:    data.humidity    ?? 0,
+        lat:         data.lat,
+        long:        data.long,
+        relay:       data.relay,        // 'ON' | 'OFF' — synced from ESP firmware
+        mode:        data.mode,         // 'AUTO' | 'MANUAL' — synced from ESP firmware
+        air_status:  data.air_status,   // ML classification label from ESP
         timestamp:   data.timestamp,
       };
 
@@ -158,7 +182,8 @@ export default function Dashboard({
     <div className="flex h-full w-full overflow-hidden">
 
       {/* ── Main panel ── */}
-      <div className="flex-1 flex flex-col overflow-y-auto">
+      <div className="flex-1 flex flex-col overflow-y-auto bg-background/50">
+        <div className="max-w-[1600px] w-full mx-auto flex flex-col min-h-full">
 
         {/* Mock mode banner */}
         {isMockMode && (
@@ -172,7 +197,10 @@ export default function Dashboard({
 
         {/* KPI Strip */}
         <div className="shrink-0 px-8 pt-6 pb-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <motion.div 
+            initial="hidden" animate="visible" variants={containerVariants}
+            className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+          >
 
             <KpiCard
               label="Active Nodes"
@@ -200,7 +228,7 @@ export default function Dashboard({
               icon={<AlertTriangle className="w-4 h-4" />}
               accent={criticalAlerts > 0 ? 'destructive' : 'primary'}
             />
-          </div>
+          </motion.div>
         </div>
 
         {/* Section header */}
@@ -217,23 +245,90 @@ export default function Dashboard({
 
         {/* Grid */}
         <div className="flex-1 px-8 pb-8">
-          {nodeKeys.length === 0 ? (
-            <div className="h-64 glass-card rounded-xl flex flex-col items-center justify-center gap-3">
-              <Activity className="w-10 h-10 text-muted-foreground animate-pulse" />
-              <p className="text-sm font-medium text-muted-foreground">Awaiting sensor data...</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {Object.entries(outdoorNodesData).map(([nodeId, data]) => (
-                <NodeCard
-                  key={nodeId}
-                  data={data}
-                  status={nodesStatus[nodeId] || { status: 'online' }}
-                  history={nodesHistory[nodeId] || []}
-                />
-              ))}
-            </div>
-          )}
+          <motion.div
+            initial="hidden" animate="visible" variants={containerVariants}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+          >
+            
+            {/* Real Nodes */}
+            {Object.entries(outdoorNodesData).map(([nodeId, data]) => (
+              <NodeCard
+                key={nodeId}
+                data={data}
+                status={nodesStatus[nodeId] || { status: 'online' }}
+                history={nodesHistory[nodeId] || []}
+              />
+            ))}
+
+            {/* Dummy Padding (If < 2 real nodes connected) */}
+            {nodeKeys.length < 2 && (
+              <motion.div variants={itemVariants} className="relative group">
+                <div className="absolute -top-3 left-4 z-10 bg-yellow-500 text-yellow-950 text-[10px] font-bold px-3 py-1 rounded-full shadow-md border border-yellow-600 uppercase tracking-wider flex items-center gap-1.5 opacity-90">
+                  <MonitorPlay className="w-3.5 h-3.5" /> Dummy Data View
+                </div>
+                <div className="pointer-events-none opacity-80 ring-2 ring-yellow-500/50 rounded-xl relative">
+                  <NodeCard
+                    data={{
+                      nodeId: 'virtual-demo-01',
+                      aqi: 72, pm2_5: 22, pm10: 38, co: 0.8, co2: 450, temperature: 24, humidity: 45,
+                      timestamp: new Date().toISOString()
+                    }}
+                    status={{ status: 'online' }}
+                    history={[]}
+                  />
+                  <div className="absolute inset-0 bg-background/10 backdrop-blur-[1px] rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="bg-card text-foreground text-xs font-semibold px-4 py-2 rounded-lg shadow-xl border border-border">Preview Only — Waiting for Hardware</p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {nodeKeys.length === 0 && (
+              <motion.div variants={itemVariants} className="relative group hidden md:block">
+                <div className="absolute -top-3 left-4 z-10 bg-yellow-500 text-yellow-950 text-[10px] font-bold px-3 py-1 rounded-full shadow-md border border-yellow-600 uppercase tracking-wider flex items-center gap-1.5 opacity-90">
+                  <MonitorPlay className="w-3.5 h-3.5" /> Dummy Data View
+                </div>
+                <div className="pointer-events-none opacity-80 ring-2 ring-yellow-500/50 rounded-xl relative">
+                  <NodeCard
+                    data={{
+                      nodeId: 'virtual-demo-02',
+                      aqi: 145, pm2_5: 55, pm10: 82, co: 2.1, co2: 850, temperature: 28, humidity: 32,
+                      timestamp: new Date().toISOString()
+                    }}
+                    status={{ status: 'online' }}
+                    history={[]}
+                  />
+                  <div className="absolute inset-0 bg-background/10 backdrop-blur-[1px] rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="bg-card text-foreground text-xs font-semibold px-4 py-2 rounded-lg shadow-xl border border-border">Preview Only — Waiting for Hardware</p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {nodeKeys.length === 0 && (
+              <motion.div variants={itemVariants} className="relative group hidden xl:block">
+                <div className="absolute -top-3 left-4 z-10 bg-yellow-500 text-yellow-950 text-[10px] font-bold px-3 py-1 rounded-full shadow-md border border-yellow-600 uppercase tracking-wider flex items-center gap-1.5 opacity-90">
+                  <MonitorPlay className="w-3.5 h-3.5" /> Dummy Data View
+                </div>
+                <div className="pointer-events-none opacity-80 ring-2 ring-yellow-500/50 rounded-xl relative">
+                  <NodeCard
+                    data={{
+                      nodeId: 'virtual-demo-03',
+                      aqi: 22, pm2_5: 5, pm10: 12, co: 0.1, co2: 380, temperature: 21, humidity: 40,
+                      timestamp: new Date().toISOString()
+                    }}
+                    status={{ status: 'online' }}
+                    history={[]}
+                  />
+                  <div className="absolute inset-0 bg-background/10 backdrop-blur-[1px] rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="bg-card text-foreground text-xs font-semibold px-4 py-2 rounded-lg shadow-xl border border-border">Preview Only — Waiting for Hardware</p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+          </motion.div>
+        </div>
         </div>
       </div>
     </div>
@@ -246,7 +341,12 @@ function KpiCard({ label, value, sub, icon, accent }: {
   icon: import('react').ReactNode; accent: 'primary' | 'destructive';
 }) {
   return (
-    <div className="glass-card rounded-xl p-5">
+    <motion.div 
+      variants={itemVariants}
+      whileHover={{ scale: 1.02 }}
+      transition={{ duration: 0.2 }}
+      className="glass-card rounded-xl p-5"
+    >
       <div className="flex items-start justify-between mb-3">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         <div className={cn(
@@ -263,6 +363,6 @@ function KpiCard({ label, value, sub, icon, accent }: {
         {value}
       </p>
       {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
-    </div>
+    </motion.div>
   );
 }

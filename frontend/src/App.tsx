@@ -114,20 +114,26 @@ export default function App() {
 
   // ── Global socket (for bell badge & AI context) ───────────────────────────
   useEffect(() => {
-    const socket = io("http://localhost:5000", { reconnectionAttempts: 2, timeout: 1500 });
+    const socket = io("http://localhost:5000", {
+      reconnectionAttempts: Infinity,  // never stop retrying
+      timeout: 3000,
+    });
 
     socket.on("node_data", (data: any) => {
       setLiveNodes(prev => ({
         ...prev,
         [data.nodeId]: {
           nodeId:      data.nodeId,
-          aqi:         Math.round((data.pm25 ?? 0) * 2.5),  // approximate AQI from PM2.5
+          aqi:         Math.round((data.pm25 ?? 0) * 2.5),
           pm2_5:       data.pm25        ?? 0,
           pm10:        data.pm10        ?? 0,
           co:          data.co          ?? 0,
           co2:         data.co2         ?? 0,
           temperature: data.temperature ?? 0,
           humidity:    data.humidity    ?? 0,
+          lat:         data.lat,
+          long:        data.long,
+          relay:       data.relay,       // 'ON' | 'OFF' from ESP firmware
           timestamp:   data.timestamp,
         }
       }));
@@ -327,7 +333,7 @@ export default function App() {
               thresholds={thresholds}
             />
           )}
-          {activeTab === "map"         && <MapPage />}
+          {activeTab === "map"         && <MapPage liveNodes={liveNodes} liveStatus={liveStatus} />}
           {activeTab === "workers"     && <WorkersPage />}
           {activeTab === "analytics"   && <AnalyticsPage />}
           {activeTab === "predictive"  && <PredictivePage />}

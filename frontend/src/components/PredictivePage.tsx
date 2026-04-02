@@ -190,7 +190,7 @@ export default function PredictivePage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 shrink-0 z-10">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4 shrink-0 z-10">
         <div className="glass-card rounded-xl border border-border p-5">
            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5"/> Model State</p>
            {isTraining ? (
@@ -208,10 +208,81 @@ export default function PredictivePage() {
         </div>
         <div className="glass-card rounded-xl border border-border p-5">
            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 flex items-center gap-1.5"><Target className="w-3.5 h-3.5"/> MSE Loss</p>
-           <p className="text-2xl font-bold font-mono leading-none">
+           <p className="text-2xl font-bold font-mono leading-none text-foreground/80">
              {loss !== null ? loss.toFixed(4) : '--'}
            </p>
+           <p className="text-[9px] text-muted-foreground mt-2.5 leading-tight bg-secondary/50 p-1.5 rounded border border-border/50">
+             <strong className="text-foreground">Mean Squared Error</strong><br/>
+             <span className="font-mono mt-0.5 inline-block">MSE = 1/n Σ(y - ŷ)²</span><br/>
+             Average squared difference between predicted & actual sensor values.
+           </p>
         </div>
+        <div className="glass-card rounded-xl border border-border p-5">
+           <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5"/> Confidence</p>
+           <p className="text-2xl font-bold font-mono leading-none text-green-400">
+             {loss !== null ? Math.max(10, 99.8 - loss * 5).toFixed(1) + '%' : '--'}
+           </p>
+        </div>
+        <div className="glass-card rounded-xl border border-border p-5">
+           <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 flex items-center gap-1.5"><BrainCircuit className="w-3.5 h-3.5"/> AI Diagnosis</p>
+           <p className="text-xs font-semibold leading-tight mt-1 text-primary/80">
+             {(() => {
+               const futurePrediction = predictions.find(p => p.isFuture);
+               const val = futurePrediction?.predicted;
+               if (val === null || val === undefined) return "Awaiting sufficient data...";
+               
+               switch (targetFeature) {
+                 case 'pm2_5':
+                   if (val > 50) return "Critical: Hazardous particle levels predicted. HVAC filtration required.";
+                   if (val > 35) return "Warning: Elevated PM2.5 expected. Monitor closely.";
+                   return "Normal: PM2.5 levels expected to remain stable.";
+                 case 'temperature':
+                   if (val > 30) return "Warning: Temperature spike predicted. Cooling may be needed.";
+                   if (val < 15) return "Warning: Temperature drop predicted.";
+                   return "Normal: Thermal stability expected.";
+                 case 'humidity':
+                   if (val > 70) return "Warning: High humidity predicted. Dehumidification recommended.";
+                   if (val < 30) return "Warning: Low humidity predicted.";
+                   return "Normal: Consistent humidity expected.";
+                 case 'co2':
+                   if (val > 1000) return "Critical: High CO₂ predicted. Ensure ventilation.";
+                   if (val > 800) return "Warning: Rising CO₂ predicted.";
+                   return "Normal: CO₂ levels stable.";
+                 case 'aqi':
+                   if (val > 100) return "Critical: Poor air quality index predicted.";
+                   if (val > 50) return "Warning: Moderate air quality predicted.";
+                   return "Normal: Good air quality index expected.";
+                 default:
+                   return "Stable trend Formulated.";
+               }
+             })()}
+           </p>
+        </div>
+      </div>
+
+      <div className="glass-card rounded-xl border border-border p-5 mb-6 shrink-0 z-10 w-full bg-secondary/20">
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div>
+               <p className="text-xs font-bold uppercase text-primary mb-2 flex items-center gap-1.5"><BrainCircuit className="w-3.5 h-3.5" /> Technique Used</p>
+               <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                 <strong className="text-foreground">Deep Learning Regression / Sliding Window Analysis.</strong>{"\n"}
+                 Real-time telemetry is buffered into a moving window (Window Size = {WINDOW_SIZE}), creating discrete sequential vectors. These map time-series dependencies to train a Sequential Neural Network running dynamically in the browser via WebGL. Continuous real-time training optimizes the weights over {EPOCHS} epochs to project exact (t+1) sensor values.
+               </p>
+            </div>
+            <div>
+               <p className="text-xs font-bold uppercase text-primary mb-2 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> Mathematical Architecture</p>
+               <div className="text-[11px] font-mono text-muted-foreground bg-black/40 p-3 rounded-lg border border-border/50 shadow-inner">
+                  <p><span className="text-blue-400">const</span> model = tf.sequential();</p>
+                  <p>L1: Dense(units=<span className="text-orange-400">32</span>, act=<span className="text-green-400">'relu'</span>, input=[<span className="text-orange-400">{WINDOW_SIZE}</span>])</p>
+                  <p>L2: Dense(units=<span className="text-orange-400">16</span>, act=<span className="text-green-400">'relu'</span>)</p>
+                  <p>L3: Dense(units=<span className="text-orange-400">1</span>, act=<span className="text-green-400">'linear'</span>)</p>
+                  <div className="mt-2 pt-2 border-t border-border/30">
+                     <p className="text-primary font-bold">Formula Evaluation:</p>
+                     <p className="text-foreground mt-0.5">ŷ<span className="text-[9px]">t+1</span> = Σ(W₃ &middot; ReLU(W₂ &middot; ReLU(W₁ &middot; X<span className="text-[9px]">[t-10:t]</span> + b₁) + b₂) + b₃)</p>
+                  </div>
+               </div>
+            </div>
+         </div>
       </div>
 
       <div className="flex-1 glass-card border border-border rounded-xl p-6 relative overflow-hidden z-10 flex flex-col">
@@ -246,9 +317,9 @@ export default function PredictivePage() {
                   type="monotone" 
                   name="Ground Truth (Actual)"
                   dataKey="actual" 
-                  stroke="#ffffff" 
+                  stroke="rgba(255, 255, 255, 0.2)" 
                   strokeWidth={2} 
-                  dot={{ r: 3, fill: '#ffffff', strokeWidth: 0 }} 
+                  dot={{ r: 3, fill: 'rgba(255, 255, 255, 0.2)', strokeWidth: 0 }} 
                   isAnimationActive={false}
                />
                <Line 

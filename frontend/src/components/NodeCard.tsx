@@ -1,8 +1,28 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { io, Socket } from 'socket.io-client';
 import { MapPin, Power, Activity, Share2, Send, X, Loader2 } from 'lucide-react';
 import LiveChart from './LiveChart';
 import GaugeWidget from './GaugeWidget';
 import { cn } from '../lib/utils';
+import { motion } from 'framer-motion';
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } }
+};
+
+// Lazy singleton — one shared socket for ALL NodeCard instances, created on first use
+let _sharedSocket: Socket | null = null;
+function getSharedSocket(): Socket {
+  if (!_sharedSocket || !_sharedSocket.connected) {
+    _sharedSocket = io('http://localhost:5000', {
+      autoConnect:        true,
+      reconnectionAttempts: 5,
+      timeout:            3000,
+    });
+  }
+  return _sharedSocket;
+}
 
 interface NodeCardProps {
   data: any;
@@ -12,6 +32,9 @@ interface NodeCardProps {
 
 export default function NodeCard({ data, status, history }: NodeCardProps) {
   const [relayActive, setRelayActive] = useState(false);
+  const [relayLoading, setRelayLoading] = useState(false);
+  const [autoMode, setAutoMode] = useState(false);
+  const AUTO_TEMP_THRESHOLD = 30; // °C — matches ESP firmware
   const [showShare, setShowShare] = useState(false);
   const [shareEmail, setShareEmail] = useState('');
   const [shareMessage, setShareMessage] = useState('');
@@ -22,7 +45,36 @@ export default function NodeCard({ data, status, history }: NodeCardProps) {
     ? Math.floor((Date.now() - new Date(data.timestamp).getTime()) / 1000)
     : 0;
 
-  const aqi = data.aqi ?? 0;
+  // ── Sync relay state from live ESP telemetry ──────────────────────────────
+  // ESP includes "relay":"ON"/"OFF" and "mode":"AUTO"/"MANUAL" in every packet
+  useEffect(() => {
+    if (data.relay === 'ON') setRelayActive(true);
+    else if (data.relay === 'OFF') setRelayActive(false);
+    if (data.mode === 'AUTO') setAutoMode(true);
+    else if (data.mode === 'MANUAL') setAutoMode(false);
+  }, [data.relay, data.mode]);
+
+  // ── Sync relay state from server relay_ack events ─────────────────────────
+  useEffect(() => {
+    const socket = getSharedSocket();
+    const handler = (ack: { nodeId: string; state: string }) => {
+      if (ack.nodeId === data.nodeId) {
+        setRelayActive(ack.state === 'ON');
+        setRelayLoading(false);
+      }
+    };
+    socket.on('relay_ack', handler);
+    return () => { socket.off('relay_ack', handler); };
+  }, [data.nodeId]);
+
+  // Zero-out metrics if hardware is disconnected
+  const aqi = isOffline ? 0 : (data.aqi ?? 0);
+  const pm2_5 = isOffline ? 0 : data.pm2_5;
+  const pm10  = isOffline ? 0 : data.pm10;
+  const co    = isOffline ? 0 : data.co;
+  const co2   = isOffline ? 0 : data.co2;
+  const temp  = isOffline ? 0 : data.temperature;
+  const hum   = isOffline ? 0 : data.humidity;
 
   const aqiMeta = aqi <= 50  ? { label: 'Good',      color: 'text-primary',    bg: 'bg-primary/10',    border: 'border-primary/20'    }
                :  aqi <= 100 ? { label: 'Moderate',   color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' }
@@ -51,10 +103,15 @@ export default function NodeCard({ data, status, history }: NodeCardProps) {
   };
 
   return (
-    <div className={cn(
-      "glass-card rounded-xl flex flex-col overflow-hidden transition-shadow duration-200 hover:shadow-md",
-      isOffline && "opacity-60"
-    )}>
+    <motion.div
+      variants={cardVariants}
+      whileHover={{ scale: 1.015 }}
+      transition={{ duration: 0.2 }}
+      className={cn(
+        "glass-card rounded-xl flex flex-col overflow-hidden transition-shadow duration-200 hover:shadow-md",
+        isOffline && "opacity-60"
+      )}
+    >
 
       {/* ── Card Header ── */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -71,9 +128,14 @@ export default function NodeCard({ data, status, history }: NodeCardProps) {
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground font-mono">{data.nodeId}</p>
-            <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+            <p className="text-[10px] font-medium flex items-center gap-1 mt-0.5 rounded-full px-2 py-0.5 border w-fit" 
+               style={{ 
+                 backgroundColor: isOffline ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                 borderColor: isOffline ? 'rgba(239, 68, 68, 0.2)' : 'transparent',
+                 color: isOffline ? 'rgb(239, 68, 68)' : 'var(--muted-foreground)'
+               }}>
               <MapPin className="w-2.5 h-2.5" />
-              Zone A · {isOffline ? 'Offline' : `Updated ${lastSeen}s ago`}
+              Zone A · {isOffline ? 'MQTT Disconnected' : `Updated ${lastSeen}s ago`}
             </p>
           </div>
         </div>
@@ -100,17 +162,22 @@ export default function NodeCard({ data, status, history }: NodeCardProps) {
         {/* Primary metrics table */}
         <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
           {[
-            { label: 'PM 2.5', value: data.pm2_5, unit: 'µg/m³' },
-            { label: 'PM 10',  value: data.pm10,  unit: 'µg/m³' },
-            { label: 'CO',     value: data.co,    unit: 'ppm'   },
-            { label: 'CO₂',    value: data.co2,   unit: 'ppm'   },
+            { label: 'PM 2.5', value: pm2_5, unit: 'µg/m³' },
+            { label: 'PM 10',  value: pm10,  unit: 'µg/m³' },
+            { label: 'CO',     value: co,    unit: 'ppm'   },
+            { label: 'CO₂',    value: co2,   unit: 'ppm'   },
           ].map(({ label, value, unit }) => (
             <div key={label} className="bg-card px-4 py-3">
               <p className="text-[10px] font-medium text-muted-foreground mb-1">{label}</p>
-              <p className="text-base font-semibold text-foreground tabular-nums font-mono">
+              <motion.p
+                key={value}
+                initial={{ opacity: 0.5 }}
+                animate={{ opacity: 1 }}
+                className="text-base font-semibold text-foreground tabular-nums font-mono"
+              >
                 {value ?? '--'}
                 <span className="text-[10px] font-normal text-muted-foreground ml-1">{unit}</span>
-              </p>
+              </motion.p>
             </div>
           ))}
         </div>
@@ -118,12 +185,12 @@ export default function NodeCard({ data, status, history }: NodeCardProps) {
         {/* Environmental gauges */}
         <div className="flex justify-around py-2">
           <GaugeWidget
-            value={data.temperature ?? 0} min={-10} max={50}
+            value={temp ?? 0} min={-10} max={50}
             label="Temperature" unit="°C"
             colorClass="stroke-orange-400" size={96}
           />
           <GaugeWidget
-            value={data.humidity ?? 0} min={0} max={100}
+            value={hum ?? 0} min={0} max={100}
             label="Humidity" unit="%"
             colorClass="stroke-blue-400" size={96}
           />
@@ -143,28 +210,88 @@ export default function NodeCard({ data, status, history }: NodeCardProps) {
             color={aqi > 150 ? 'var(--color-destructive)' : 'var(--color-primary)'}
           />
         </div>
+        {/* ── Relay Control Panel ── */}
+        <div className="pt-3 border-t border-border space-y-2.5">
 
-        {/* Relay control */}
-        <div className="flex items-center justify-between pt-1 border-t border-border">
-          <div>
-            <p className="text-xs font-medium text-foreground">Exhaust Fan</p>
-            <p className={cn("text-[10px] mt-0.5", relayActive ? 'text-primary' : 'text-muted-foreground')}>
-              {relayActive ? 'Running' : 'Standby'}
-            </p>
+          {/* Mode toggle row */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-foreground">Exhaust Fan / Relay</p>
+              <p className={cn(
+                "text-[10px] mt-0.5 font-mono",
+                relayActive ? 'text-primary font-semibold' : 'text-muted-foreground'
+              )}>
+                {relayLoading ? 'Sending...' : relayActive ? '● ON — Running' : '○ OFF — Standby'}
+              </p>
+            </div>
+
+            {/* AUTO / MANUAL toggle */}
+            <button
+              onClick={() => {
+                if (isOffline) return;
+                const next = !autoMode;
+                setAutoMode(next);
+                setRelayLoading(true);
+                getSharedSocket().emit('relay_control', {
+                  nodeId: data.nodeId,
+                  mode: next ? 'AUTO' : 'MANUAL',
+                  state: next ? 'AUTO' : (relayActive ? 'ON' : 'OFF')
+                });
+                setTimeout(() => setRelayLoading(false), 1500);
+              }}
+              disabled={isOffline}
+              title={autoMode ? 'Switch to Manual control' : 'Switch to Auto (temp > 30°C)'}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all",
+                autoMode
+                  ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-600 dark:text-yellow-400'
+                  : 'bg-secondary border-border text-muted-foreground hover:border-primary/30'
+              )}
+            >
+              {autoMode ? '⚡ AUTO' : '🖱 MANUAL'}
+            </button>
           </div>
-          <button
-            onClick={() => setRelayActive(v => !v)}
-            disabled={isOffline}
-            className={cn(
-              "w-9 h-9 rounded-lg flex items-center justify-center transition-all border",
-              relayActive
-                ? 'bg-primary border-primary text-primary-foreground shadow-sm'
-                : 'bg-secondary border-border text-muted-foreground hover:text-foreground hover:bg-muted',
-              isOffline && 'opacity-40 cursor-not-allowed'
-            )}
-          >
-            <Power className="w-4 h-4" />
-          </button>
+
+          {/* Auto mode info bar */}
+          {autoMode && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+              <span className="text-[10px] text-yellow-700 dark:text-yellow-300 font-medium">
+                Auto: relay {relayActive ? 'ON' : 'OFF'} · Triggers when temp &gt; {AUTO_TEMP_THRESHOLD}°C
+                {temp > 0 && <span className={cn("ml-1 font-bold", temp > AUTO_TEMP_THRESHOLD ? 'text-destructive' : 'text-primary')}>
+                  (now {temp}°C)
+                </span>}
+              </span>
+            </div>
+          )}
+
+          {/* Manual button — only active in MANUAL mode */}
+          {!autoMode && (
+            <button
+              onClick={() => {
+                if (isOffline || relayLoading) return;
+                const next = !relayActive;
+                setRelayLoading(true);
+                getSharedSocket().emit('relay_control', { nodeId: data.nodeId, state: next ? 'ON' : 'OFF', mode: 'MANUAL' });
+                setTimeout(() => {
+                  setRelayActive(next);
+                  setRelayLoading(false);
+                }, 1500);
+              }}
+              disabled={isOffline || relayLoading}
+              className={cn(
+                "w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold border transition-all",
+                relayActive
+                  ? 'bg-primary border-primary text-primary-foreground hover:opacity-90'
+                  : 'bg-secondary border-border text-muted-foreground hover:text-foreground hover:border-primary/30',
+                (isOffline || relayLoading) && 'opacity-40 cursor-not-allowed'
+              )}
+            >
+              {relayLoading
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending...</>
+                : <><Power className="w-3.5 h-3.5" /> {relayActive ? 'Turn OFF' : 'Turn ON'}</>
+              }
+            </button>
+          )}
         </div>
       </div>
 
@@ -214,6 +341,6 @@ export default function NodeCard({ data, status, history }: NodeCardProps) {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

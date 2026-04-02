@@ -3,6 +3,16 @@ import { io } from 'socket.io-client';
 import { Users, UserCircle, Activity, Wind, AlertTriangle, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import LiveChart from './LiveChart';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } }
+};
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+};
 
 export default function WorkersPage() {
   const [nodesData, setNodesData]       = useState<Record<string, any>>({});
@@ -75,22 +85,67 @@ export default function WorkersPage() {
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden relative">
       <div className="shrink-0 px-8 pt-6 pb-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <motion.div initial="hidden" animate="visible" variants={containerVariants} className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <KpiCard label="Active Wearables" value={activeCount.toString()} sub={`${workerKeys.length} total trackers`} icon={<Users className="w-4 h-4" />} accent="primary" />
           <KpiCard label="Avg Worker Exposure" value={avgAqi.toString() + ' AQI'} icon={<Wind className="w-4 h-4" />} accent={getSeverity(avgAqi)} />
           <KpiCard label="Critical Risk Warning" value={Object.values(nodesData).filter(n => n.aqi > 150).length.toString()} icon={<AlertTriangle className="w-4 h-4" />} accent="destructive" />
-        </div>
+        </motion.div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-8 pb-8">
         <h3 className="text-sm font-semibold text-foreground mb-4">Personnel Roster</h3>
         {workerKeys.length === 0 ? (
-          <div className="h-64 glass-card rounded-xl flex flex-col items-center justify-center gap-3">
-            <Activity className="w-10 h-10 text-muted-foreground animate-pulse" />
-            <p className="text-sm font-medium text-muted-foreground">Awaiting wearable telemetry...</p>
-          </div>
+          <motion.div initial="hidden" animate="visible" variants={containerVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {[
+              { id: 'worker_demo_john', name: 'John Doe', status: 'online', data: { aqi: 45, pm2_5: 12, pm10: 20, co: 1.1, co2: 600 } },
+              { id: 'worker_demo_sarah', name: 'Sarah Jane', status: 'online', data: { aqi: 135, pm2_5: 45, pm10: 60, co: 3.2, co2: 850 } },
+              { id: 'worker_demo_mike', name: 'Mike Smith', status: 'offline', data: { aqi: 0, pm2_5: 0, pm10: 0, co: 0, co2: 0 } }
+            ].map(dummy => (
+              <div key={dummy.id} className="relative group">
+                <div className="absolute -top-3 left-4 z-10 bg-yellow-500 text-yellow-950 text-[10px] font-bold px-3 py-1 rounded-full shadow-md border border-yellow-600 uppercase tracking-wider flex items-center gap-1.5 opacity-90">
+                  <Activity className="w-3.5 h-3.5" /> Dummy Personnel
+                </div>
+                <div className="pointer-events-none opacity-80 ring-2 ring-yellow-500/50 rounded-xl relative">
+                  <div className="glass-card rounded-xl p-5 text-left flex flex-col items-start gap-4">
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-secondary border border-border flex items-center justify-center text-muted-foreground">
+                          <UserCircle className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold capitalize text-foreground">{dummy.name}</p>
+                          <p className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                            <span className={cn("w-1.5 h-1.5 rounded-full inline-block", dummy.status === 'online' ? 'bg-green-500' : 'bg-red-500')} />
+                            {dummy.status === 'online' ? 'Connected' : 'Signal Lost'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <div className={cn("status-badge uppercase font-bold", dummy.data.aqi > 100 ? 'bg-destructive/10 border-destructive/20 text-destructive' : dummy.data.aqi > 50 ? 'bg-warning/10 border-warning/20 text-warning' : 'bg-primary/10 border-primary/20 text-primary')}>
+                          AQI {dummy.data.aqi}
+                        </div>
+                        <div className={cn("text-[9px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider", dummy.data.aqi > 100 ? "bg-destructive/10 text-destructive border-destructive/20" : "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20")}>
+                          {dummy.data.aqi > 100 ? 'At Risk' : 'Safe'}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-4 w-full gap-2 border-t border-border pt-4 mt-1">
+                      <div><p className="text-[9px] text-muted-foreground">PM2.5</p><p className="text-xs font-mono font-medium">{dummy.data.pm2_5}</p></div>
+                      <div><p className="text-[9px] text-muted-foreground">PM10</p><p className="text-xs font-mono font-medium">{dummy.data.pm10}</p></div>
+                      <div><p className="text-[9px] text-muted-foreground">CO</p><p className="text-xs font-mono font-medium">{dummy.data.co}</p></div>
+                      <div><p className="text-[9px] text-muted-foreground">CO₂</p><p className="text-xs font-mono font-medium">{dummy.data.co2}</p></div>
+                    </div>
+                  </div>
+                  <div className="absolute inset-0 bg-background/10 backdrop-blur-[1px] rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="bg-card text-foreground text-xs font-semibold px-4 py-2 rounded-lg shadow-xl border border-border">Preview Only</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </motion.div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <motion.div initial="hidden" animate="visible" variants={containerVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {workerKeys.map(id => {
               const data = nodesData[id];
               const stat = nodesStatus[id]?.status || 'unknown';
@@ -99,8 +154,10 @@ export default function WorkersPage() {
               const bg = aqi > 100 ? 'bg-destructive/10 border-destructive/20 text-destructive' : aqi > 50 ? 'bg-warning/10 border-warning/20 text-warning' : 'bg-primary/10 border-primary/20 text-primary';
 
               return (
-                <button
+                <motion.button
                   key={id}
+                  variants={itemVariants}
+                  whileHover={{ scale: 1.015 }}
                   onClick={() => setSelectedWorker(id)}
                   className="glass-card rounded-xl p-5 hover:shadow-md transition-all text-left flex flex-col items-start gap-4"
                 >
@@ -117,36 +174,45 @@ export default function WorkersPage() {
                         </p>
                       </div>
                     </div>
-                    <div className={cn("status-badge uppercase font-bold", bg)}>AQI {aqi}</div>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <div className={cn("status-badge uppercase font-bold", bg)}>AQI {aqi}</div>
+                      <div className={cn("text-[9px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider", aqi > 100 ? "bg-destructive/10 text-destructive border-destructive/20" : "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20")}>
+                        {aqi > 100 ? 'At Risk' : 'Safe'}
+                      </div>
+                    </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 w-full gap-2 border-t border-border pt-4 mt-1">
-                    <div><p className="text-[10px] text-muted-foreground">PM2.5</p><p className="text-xs font-mono font-medium">{data.pm2_5} <span className="text-[9px]">µg/m³</span></p></div>
-                    <div><p className="text-[10px] text-muted-foreground">CO Level</p><p className="text-xs font-mono font-medium">{data.co} <span className="text-[9px]">ppm</span></p></div>
+                  <div className="grid grid-cols-4 w-full gap-2 border-t border-border pt-4 mt-1">
+                    <div><p className="text-[9px] text-muted-foreground">PM2.5</p><p className="text-xs font-mono font-medium">{data.pm2_5}</p></div>
+                    <div><p className="text-[9px] text-muted-foreground">PM10</p><p className="text-xs font-mono font-medium">{data.pm10}</p></div>
+                    <div><p className="text-[9px] text-muted-foreground">CO</p><p className="text-xs font-mono font-medium">{data.co}</p></div>
+                    <div><p className="text-[9px] text-muted-foreground">CO₂</p><p className="text-xs font-mono font-medium">{data.co2}</p></div>
                   </div>
-                </button>
+                </motion.button>
               );
             })}
-          </div>
+          </motion.div>
         )}
       </div>
 
-      {selectedWorker && (
-        <WorkerDetailModal 
-          workerId={selectedWorker} 
-          data={nodesData[selectedWorker]} 
-          status={nodesStatus[selectedWorker]} 
-          history={nodesHistory[selectedWorker] || []}
-          onClose={() => setSelectedWorker(null)} 
-        />
-      )}
+      <AnimatePresence>
+        {selectedWorker && (
+          <WorkerDetailModal 
+            workerId={selectedWorker} 
+            data={nodesData[selectedWorker]} 
+            status={nodesStatus[selectedWorker]} 
+            history={nodesHistory[selectedWorker] || []}
+            onClose={() => setSelectedWorker(null)} 
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 function KpiCard({ label, value, sub, icon, accent }: any) {
   return (
-    <div className="glass-card rounded-xl p-5">
+    <motion.div variants={itemVariants} whileHover={{ scale: 1.02 }} className="glass-card rounded-xl p-5">
       <div className="flex items-start justify-between mb-3">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         <div className={cn("p-1.5 rounded-md", accent === 'destructive' ? 'bg-destructive/10 text-destructive' : accent === 'warning' ? 'bg-yellow-500/10 text-yellow-600' : 'bg-primary/10 text-primary')}>
@@ -155,7 +221,7 @@ function KpiCard({ label, value, sub, icon, accent }: any) {
       </div>
       <p className={cn("text-2xl font-semibold tracking-tight tabular-nums", accent === 'destructive' ? 'text-destructive' : 'text-foreground')}>{value}</p>
       {sub && <p className="text-[10px] text-muted-foreground mt-1">{sub}</p>}
-    </div>
+    </motion.div>
   );
 }
 
@@ -164,8 +230,14 @@ function WorkerDetailModal({ workerId, data, status, history, onClose }: any) {
   const isSafe = (data?.aqi || 0) < 100;
   
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="glass-panel w-full max-w-lg rounded-2xl shadow-2xl flex flex-col animate-in zoom-in-95 duration-200 overflow-hidden">
+    <motion.div 
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
+    >
+      <motion.div 
+        initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+        className="glass-panel w-full max-w-lg rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+      >
         
         <div className="flex items-center justify-between p-5 border-b border-border bg-card">
           <div className="flex items-center gap-3">
@@ -211,8 +283,8 @@ function WorkerDetailModal({ workerId, data, status, history, onClose }: any) {
           </div>
         </div>
 
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

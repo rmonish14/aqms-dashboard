@@ -5,6 +5,16 @@ import {
 } from 'recharts';
 import { AlertOctagon, Activity, FileDown, DatabaseBackup, Clock, ShieldAlert } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { motion } from 'framer-motion';
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } }
+};
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+};
 
 export default function AnalyticsPage() {
   const [events, setEvents] = useState<any[]>([]);
@@ -14,7 +24,16 @@ export default function AnalyticsPage() {
     fetch('http://localhost:5000/api/nodes/fleet/anomalies')
       .then(r => r.json())
       .then(data => {
-        setEvents(data || []);
+        const mappedData = (data || []).map((e: any) => ({
+          id: e.id,
+          node_id: e.device_id || e.node_id,
+          event_category: e.status || e.event_category || 'UNKNOWN_ANOMALY',
+          aqi: e.aqi || (e.pm25 ? Math.round(e.pm25 * 2.5) : 0),
+          pm2_5: e.pm25 || e.pm2_5 || 0,
+          co2_ppm: e.co2 || e.co2_ppm || 0,
+          timestamp: e.created_at || e.timestamp
+        }));
+        setEvents(mappedData);
         setIsLoading(false);
       })
       .catch((err) => {
@@ -60,10 +79,10 @@ export default function AnalyticsPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-7xl mx-auto px-8 py-6 space-y-6">
+      <motion.div initial="hidden" animate="visible" variants={containerVariants} className="max-w-7xl mx-auto px-8 py-6 space-y-6">
 
         {/* Header */}
-        <div className="flex items-center justify-between pb-2 border-b border-border">
+        <motion.div variants={itemVariants} className="flex items-center justify-between pb-2 border-b border-border">
           <div className="flex items-center gap-3">
             <DatabaseBackup className="w-5 h-5 text-muted-foreground" />
             <div>
@@ -74,26 +93,26 @@ export default function AnalyticsPage() {
           <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity">
             <FileDown className="w-3.5 h-3.5" /> Export DB Ledger
           </button>
-        </div>
+        </motion.div>
 
         {/* Summary KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="glass-card rounded-xl p-5 border-l-4 border-l-destructive/50">
             <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-2 flex flex-row items-center gap-1.5"><AlertOctagon className="w-3.5 h-3.5" /> Critical AQI Spikes</p>
-            <p className="text-2xl font-mono font-semibold text-red-500">{events.filter(e => e.event_category === 'CRITICAL_AQI_SPIKE').length}</p>
+            <p className="text-2xl font-mono font-semibold text-red-500">{events.filter(e => String(e.event_category).includes('AQI') || String(e.event_category).includes('PM25')).length}</p>
           </div>
           <div className="glass-card rounded-xl p-5 border-l-4 border-l-orange-500/50">
             <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-2 flex flex-row items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> Hazardous Gas Hits</p>
-            <p className="text-2xl font-mono font-semibold text-orange-500">{events.filter(e => e.event_category === 'HAZARDOUS_GAS_DETECTED').length}</p>
+            <p className="text-2xl font-mono font-semibold text-orange-500">{events.filter(e => String(e.event_category).includes('GAS') || String(e.event_category).includes('CO')).length}</p>
           </div>
           <div className="glass-card rounded-xl p-5 border-l-4 border-l-yellow-500/50">
             <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-2 flex flex-row items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Offline Blackouts</p>
-            <p className="text-2xl font-mono font-semibold text-yellow-500">{events.filter(e => e.event_category === 'NODE_OFFLINE_DROP').length}</p>
+            <p className="text-2xl font-mono font-semibold text-yellow-500">{events.filter(e => String(e.event_category).includes('OFFLINE')).length}</p>
           </div>
-        </div>
+        </motion.div>
 
         {/* Working Condition Bar Graph */}
-        <div className="glass-card rounded-xl p-6">
+        <motion.div variants={itemVariants} className="glass-card rounded-xl p-6">
            <div className="mb-5">
              <h3 className="text-sm font-semibold text-foreground">Node Condition Reliability</h3>
              <p className="text-[10px] text-muted-foreground mt-0.5">Absolute count of critical anomalies triggered per node (Higher = Worse Condition)</p>
@@ -120,10 +139,10 @@ export default function AnalyticsPage() {
                 </ResponsiveContainer>
              )}
            </div>
-        </div>
+        </motion.div>
 
         {/* Scatter Event Map */}
-        <div className="glass-card rounded-xl p-6">
+        <motion.div variants={itemVariants} className="glass-card rounded-xl p-6">
           <div className="mb-5">
             <h3 className="text-sm font-semibold text-foreground">Anomaly Constellation Map</h3>
             <p className="text-[10px] text-muted-foreground mt-0.5">Visual mapping of intense pressure events across the 24h database threshold window</p>
@@ -157,7 +176,7 @@ export default function AnalyticsPage() {
                           <div className="bg-card border border-border p-3 rounded-lg shadow-xl text-xs max-w-[200px]">
                             <p className="font-bold text-foreground mb-1">{d.node_id}</p>
                             <p className={cn("text-[9px] font-mono tracking-wider px-1.5 py-0.5 inline-block rounded uppercase mb-2", 
-                              d.event_category.includes('AQI') ? 'bg-red-500/20 text-red-500' : 'bg-orange-500/20 text-orange-500'
+                              (d.event_category || '').includes('AQI') ? 'bg-red-500/20 text-red-500' : 'bg-orange-500/20 text-orange-500'
                             )}>{d.event_category}</p>
                             <div className="grid grid-cols-2 gap-2 mt-1">
                               <div><span className="text-muted-foreground block text-[9px]">AQI</span> <span className="font-mono">{d.aqi || '--'}</span></div>
@@ -174,10 +193,10 @@ export default function AnalyticsPage() {
               </ResponsiveContainer>
             )}
           </div>
-        </div>
+        </motion.div>
 
         {/* Database Ledger Table */}
-        <div className="glass-card rounded-xl p-0 overflow-hidden">
+        <motion.div variants={itemVariants} className="glass-card rounded-xl p-0 overflow-hidden">
           <div className="p-5 border-b border-border">
              <h3 className="text-sm font-semibold text-foreground">PostgreSQL Active Ledger</h3>
              <p className="text-[10px] text-muted-foreground mt-0.5">Raw table output from `critical_sensor_events` selection</p>
@@ -199,9 +218,9 @@ export default function AnalyticsPage() {
                     <td className="px-5 py-4 font-mono text-muted-foreground whitespace-nowrap">{new Date(e.timestamp).toLocaleString()}</td>
                     <td className="px-5 py-4 font-medium text-foreground">{e.node_id}</td>
                     <td className="px-5 py-4 text-[10px]">
-                       <span className={cn("px-2 py-0.5 rounded-full font-bold uppercase", 
-                          e.event_category === 'NODE_OFFLINE_DROP' ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20' : 
-                          e.event_category === 'CRITICAL_AQI_SPIKE' ? 'bg-red-500/10 text-red-500 border border-red-500/20' :
+                        <span className={cn("px-2 py-0.5 rounded-full font-bold uppercase", 
+                          (e.event_category || '').includes('NODE_OFFLINE') ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20' : 
+                          (e.event_category || '').includes('CRITICAL') ? 'bg-red-500/10 text-red-500 border border-red-500/20' :
                           'bg-orange-500/10 text-orange-500 border border-orange-500/20'
                        )}>
                          {e.event_category}
@@ -219,9 +238,9 @@ export default function AnalyticsPage() {
               </tbody>
             </table>
           </div>
-        </div>
+        </motion.div>
 
-      </div>
+      </motion.div>
     </div>
   );
 }
