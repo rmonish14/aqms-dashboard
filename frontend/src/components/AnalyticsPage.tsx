@@ -6,6 +6,7 @@ import {
 import { AlertOctagon, Activity, FileDown, DatabaseBackup, Clock, ShieldAlert } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'framer-motion';
+import { API_URL } from '../lib/config';
 
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -21,7 +22,7 @@ export default function AnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/nodes/fleet/anomalies')
+    fetch(`${API_URL}/api/nodes/fleet/anomalies`)
       .then(r => r.json())
       .then(data => {
         const mappedData = (data || []).map((e: any) => ({

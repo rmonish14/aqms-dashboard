@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_URL } from "./lib/config";
 import { io } from "socket.io-client";
 import Dashboard from "./components/Dashboard";
 import InfoPage from "./components/InfoPage";
@@ -70,7 +71,7 @@ export default function App() {
 
   // ── Sync Settings with Backend ────────────────────────────────────────────
   useEffect(() => {
-    fetch('http://localhost:5000/api/config')
+    fetch(`${API_URL}/api/config`)
       .then(res => res.json())
       .then(data => {
         if (data.thresholds) {
@@ -88,7 +89,7 @@ export default function App() {
     if (updates.alertEmail !== undefined) setAlertEmail(updates.alertEmail);
     
     try {
-      await fetch('http://localhost:5000/api/config', {
+      await fetch(`${API_URL}/api/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
@@ -114,7 +115,7 @@ export default function App() {
 
   // ── Global socket (for bell badge & AI context) ───────────────────────────
   useEffect(() => {
-    const socket = io("http://localhost:5000", {
+    const socket = io(API_URL, {
       reconnectionAttempts: Infinity,  // never stop retrying
       timeout: 3000,
     });

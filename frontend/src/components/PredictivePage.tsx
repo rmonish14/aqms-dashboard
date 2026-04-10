@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { BrainCircuit, Activity, TrendingUp, Loader2, Target } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { cn } from '../lib/utils';
+import { API_URL } from '../lib/config';
 
 const WINDOW_SIZE = 10; // Use last 10 points to predict the 11th
 const EPOCHS = 50;
@@ -24,7 +25,7 @@ export default function PredictivePage() {
   // 1. Initialise the TensorFlow.js Model & Socket Stream
   useEffect(() => {
     // Connect to global MQTT/Socket layer
-    const socket = io("http://localhost:5000");
+    const socket = io(API_URL);
     
     socket.on("node_data", (data: any) => {
        setAvailableNodes(prev => prev.includes(data.nodeId) ? prev : [...prev, data.nodeId].sort());

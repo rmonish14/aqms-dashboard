@@ -5,6 +5,7 @@ import type { SystemAlert } from './AlertFeed';
 import { Radio, AlertTriangle, MonitorPlay, TrendingUp, Thermometer, Activity } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'framer-motion';
+import { API_URL } from '../lib/config';
 
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -35,7 +36,7 @@ export default function Dashboard({
   const [isMockMode, setIsMockMode]     = useState(false);
 
   useEffect(() => {
-    const socket = io('http://localhost:5000', {
+    const socket = io(API_URL, {
       reconnectionAttempts: Infinity,  // keep retrying — don't lock into mock mode permanently
       timeout:            3000,
     });

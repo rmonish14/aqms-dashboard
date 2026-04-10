@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_URL } from '../lib/config';
 import { io, Socket } from 'socket.io-client';
 import { MapPin, Power, Activity, Share2, Send, X, Loader2 } from 'lucide-react';
 import LiveChart from './LiveChart';
@@ -15,7 +16,7 @@ const cardVariants = {
 let _sharedSocket: Socket | null = null;
 function getSharedSocket(): Socket {
   if (!_sharedSocket || !_sharedSocket.connected) {
-    _sharedSocket = io('http://localhost:5000', {
+    _sharedSocket = io(API_URL, {
       autoConnect:        true,
       reconnectionAttempts: 5,
       timeout:            3000,
@@ -81,7 +82,7 @@ export default function NodeCard({ data, status, history }: NodeCardProps) {
   const handleShare = async () => {
     setIsSharing(true);
     try {
-      await fetch('http://localhost:5000/api/email/share', {
+      await fetch(`${API_URL}/api/email/share`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

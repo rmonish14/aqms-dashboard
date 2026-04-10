@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Database, HardDrive, LayoutGrid, TableProperties, Loader2, Activity } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { API_URL } from '../lib/config';
 
 type TableOverview = {
   name: string;
@@ -28,7 +29,7 @@ export default function DatabasePage() {
 
   // Fetch overview on mount
   useEffect(() => {
-    fetch('http://localhost:5000/api/database/overview')
+    fetch(`${API_URL}/api/database/overview`)
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch database overview');
         return res.json();
@@ -61,7 +62,7 @@ export default function DatabasePage() {
     if (!activeTable) return;
     setTableLoading(true);
     
-    fetch(`http://localhost:5000/api/database/table/${activeTable}`)
+    fetch(`${API_URL}/api/database/table/${activeTable}`)
       .then(res => {
         if (!res.ok) throw new Error(`Failed to fetch table ${activeTable}`);
         return res.json();

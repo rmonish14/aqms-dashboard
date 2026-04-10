@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Wind, Lock, User, Activity, ArrowRight, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { API_URL } from '../lib/config';
 
 export type SessionPayload = {
   token: string;
@@ -34,7 +35,7 @@ export default function AuthPage({ onLogin }: AuthPageProps) {
       
       let res;
       try {
-        res = await fetch(`http://localhost:5000${endpoint}`, {
+        res = await fetch(`${API_URL}${endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password, role: 'operator' })
@@ -55,7 +56,7 @@ export default function AuthPage({ onLogin }: AuthPageProps) {
         onLogin({ token: data.token, username: data.username, role: data.role });
       } else {
         // Auto-login after successful registration!
-        const loginRes = await fetch('http://localhost:5000/api/auth/login', {
+        const loginRes = await fetch(`${API_URL}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password })

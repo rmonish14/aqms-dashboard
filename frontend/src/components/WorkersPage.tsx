@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
+import { API_URL } from '../lib/config';
 import { Wrench, UserCircle, Settings, CheckCircle, AlertTriangle, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,7 +19,7 @@ export default function MaintenancePage() {
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
 
   useEffect(() => {
-    const socket = io('http://localhost:5000', { reconnectionAttempts: 3, timeout: 2000 });
+    const socket = io(API_URL, { reconnectionAttempts: 3, timeout: 2000 });
 
     socket.on('node_data', (data) => {
       // Filter only spares simulators for maintenance logs
