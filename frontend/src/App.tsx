@@ -120,9 +120,12 @@ export default function App() {
     });
 
     socket.on("node_data", (data: any) => {
-      setLiveNodes(prev => ({
-        ...prev,
-        [data.nodeId]: {
+      setLiveNodes(prev => {
+        const isTransitioning = Object.keys(prev).some(k => k.startsWith('machine-'));
+        const base = isTransitioning ? {} : prev;
+        return {
+          ...base,
+          [data.nodeId]: {
           nodeId:      data.nodeId,
           vib:         data.vib         ?? 0,
           temp:        data.temp        ?? 0,
@@ -134,7 +137,8 @@ export default function App() {
           ml_status:   data.ml_status,
           timestamp:   data.timestamp,
         }
-      }));
+      };
+      });
       // Auto-mark node as online when data arrives
       setLiveStatus(prev => ({ ...prev, [data.nodeId]: { status: "online" } }));
     });

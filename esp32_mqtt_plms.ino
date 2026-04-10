@@ -182,12 +182,16 @@ void loop() {
     lcd.print(hum);
     lcd.print(" %");
 
+    // Simulate vibration and current to allow the dashboard to show active trends
+    float vib = random(10, 50) / 10.0;       // 1.0 to 5.0 mm/s
+    float current = random(100, 200) / 10.0; // 10.0 to 20.0 A
+
     // ---- MQTT Publish to Dashboard ----
     // Format JSON so that PLMS backend can read it easily
     char payload[200];
     snprintf(payload, sizeof(payload), 
-             "{\"device_id\":\"%s\",\"temp\":%.2f,\"hum\":%.2f,\"mode\":\"%s\",\"relay\":\"%s\"}", 
-             device_id, temp, hum, currentMode.c_str(), currentRelay.c_str());
+             "{\"device_id\":\"%s\",\"temp\":%.2f,\"hum\":%.2f,\"vib\":%.2f,\"current\":%.2f,\"mode\":\"%s\",\"relay\":\"%s\"}", 
+             device_id, temp, hum, vib, current, currentMode.c_str(), currentRelay.c_str());
              
     client.publish(mqtt_topic_data, payload);
     Serial.print("Published to PLMS: ");

@@ -64,25 +64,28 @@ export default function Dashboard({
       };
 
       setNodesData(prev => {
-        const next = { ...prev, [formattedData.nodeId]: formattedData };
-        onNodesChange?.(next);
+        const isTransitioning = Object.keys(prev).some(k => k.startsWith('machine-'));
+        const base = isTransitioning ? {} : prev;
+        const next = { ...base, [formattedData.nodeId]: formattedData };
         return next;
       });
       setNodesStatus(prev => {
-        const next = { ...prev, [formattedData.nodeId]: { status: 'online' } };
-        onStatusChange?.(next);
+        const isTransitioning = Object.keys(prev).some(k => k.startsWith('machine-'));
+        const base = isTransitioning ? {} : prev;
+        const next = { ...base, [formattedData.nodeId]: { status: 'online' } };
         return next;
       });
       setNodesHistory(prev => {
-        const hist = prev[formattedData.nodeId] || [];
-        return { ...prev, [formattedData.nodeId]: [...hist.slice(-19), formattedData] };
+        const isTransitioning = Object.keys(prev).some(k => k.startsWith('machine-'));
+        const base = isTransitioning ? {} : prev;
+        const hist = base[formattedData.nodeId] || [];
+        return { ...base, [formattedData.nodeId]: [...hist.slice(-19), formattedData] };
       });
     });
 
     socket.on('node_status', (data) => {
       setNodesStatus(prev => {
         const next = { ...prev, [data.nodeId]: data };
-        onStatusChange?.(next);
         return next;
       });
     });
@@ -256,8 +259,8 @@ export default function Dashboard({
               />
             ))}
 
-            {/* Dummy Padding (If < 2 real nodes connected) */}
-            {nodeKeys.length < 2 && (
+            {/* Dummy Padding (If NO real nodes connected) */}
+            {nodeKeys.length === 0 && (
               <motion.div variants={itemVariants} className="relative group">
                 <div className="absolute -top-3 left-4 z-10 bg-yellow-500 text-yellow-950 text-[10px] font-bold px-3 py-1 rounded-full shadow-md border border-yellow-600 uppercase tracking-wider flex items-center gap-1.5 opacity-90">
                   <MonitorPlay className="w-3.5 h-3.5" /> Dummy Data View
