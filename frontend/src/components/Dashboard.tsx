@@ -63,19 +63,19 @@ export default function Dashboard({
       };
 
       setNodesData(prev => {
-        const isTransitioning = Object.keys(prev).some(k => k.startsWith('machine-'));
+        const isTransitioning = Object.keys(prev).includes('machine-alpha');
         const base = isTransitioning ? {} : prev;
         const next = { ...base, [formattedData.nodeId]: formattedData };
         return next;
       });
       setNodesStatus(prev => {
-        const isTransitioning = Object.keys(prev).some(k => k.startsWith('machine-'));
+        const isTransitioning = Object.keys(prev).includes('machine-alpha');
         const base = isTransitioning ? {} : prev;
         const next = { ...base, [formattedData.nodeId]: { status: 'online' } };
         return next;
       });
       setNodesHistory(prev => {
-        const isTransitioning = Object.keys(prev).some(k => k.startsWith('machine-'));
+        const isTransitioning = Object.keys(prev).includes('machine-alpha');
         const base = isTransitioning ? {} : prev;
         const hist = base[formattedData.nodeId] || [];
         return { ...base, [formattedData.nodeId]: [...hist.slice(-19), formattedData] };
