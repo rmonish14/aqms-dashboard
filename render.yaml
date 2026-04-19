@@ -5,7 +5,7 @@ services:
     region: singapore
     plan: free
     buildCommand: npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend
-    startCommand: node backend/server.js
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
@@ -16,7 +16,7 @@ services:
       - key: HIVEMQ_URL
         value: mqtt://broker.hivemq.com:1883
       - key: JWT_SECRET
-        value: change_this_to_a_long_random_secret_in_production
+        value: plms_super_secret_jwt_key_2024
       - key: SMTP_USER
         value: kassandra.glover@ethereal.email
       - key: SMTP_PASS
