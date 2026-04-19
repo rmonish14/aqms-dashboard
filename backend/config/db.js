@@ -11,7 +11,7 @@ const pool = new Pool({
   ssl: isRenderDb ? { rejectUnauthorized: false } : false,
   max: 10,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  connectionTimeoutMillis: 30000, // Increased to 30s to allow Render DB spin-up
 });
 
 pool.on('connect', () => {
