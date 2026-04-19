@@ -113,6 +113,11 @@ mqttClient.on('connect', () => {
     if (err) console.error('[MQTT] Subscribe error (data):', err);
     else      console.log('[MQTT] Subscribed → plms/+/data');
   });
+  
+  // Legacy support for ESP32s still running the old firmware
+  mqttClient.subscribe('aqms/+/data', { qos: 1 });
+  mqttClient.subscribe('aqms/+/status', { qos: 0 });
+  mqttClient.subscribe('aqms/+/control/ack', { qos: 0 });
 
   // Subscribe to custom machine topics from the specific ESP setup
   mqttClient.subscribe('machine/sensor/+', { qos: 1 }, (err) => {
